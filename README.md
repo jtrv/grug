@@ -4,8 +4,9 @@ Grug is a command-line tool that provides a workflow for expanding, editing, dif
 
 ## TODO
 
-- [ ] make --write accept hunks
-- [ ] make --preview accept grep lines
+- [ ] adapt `--write` to apply hunk changes (e.g. edited output from `--expand`)
+- [ ] create `--preview` to view a diff of lines/hunks supplied and current file contents
+- [ ] refactor so it doesn't seem like I leaned on chatgpt as much as I did
 - [ ] add tests
 
 ## Usage
@@ -18,7 +19,6 @@ grug [OPTIONS]
   -C, --context <CONTEXT_LINES>    Include CONTEXT_LINES above and below each line from stdin in the hunk
   -e, --expand                     Expand the lines from stdin into hunks
   -h, --help                       Print help information
-  -p, --preview                    Preview diffs from the hunks passed to stdin
   -w, --write                      Replace lines in files based on input from stdin
 ```
 
@@ -28,12 +28,6 @@ To expand lines from stdin into hunks:
 
 ```
 echo "src/main.rs:10" | grug --expand
-```
-
-To preview diffs from the hunks passed to stdin:
-
-```
-echo "src/main.rs:10" | grug --preview
 ```
 
 To replace lines in files based on input from stdin:

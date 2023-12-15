@@ -1,6 +1,6 @@
 mod errors;
 mod expand;
-mod preview;
+/*mod preview;*/
 mod write;
 
 use clap::{App, Arg};
@@ -16,13 +16,13 @@ fn main() -> Result<(), AppError> {
                 .takes_value(false)
                 .help("Expand the lines from stdin into hunks"),
         )
-        .arg(
+        /*.arg(
             Arg::new("preview")
                 .short('p')
                 .long("preview")
                 .takes_value(false)
                 .help("Preview diffs from the hunks passed to stdin"),
-        )
+        )*/
         .arg(
             Arg::new("above")
                 .short('A')
@@ -58,12 +58,12 @@ fn main() -> Result<(), AppError> {
 
     if matches.is_present("expand") {
         expand::expand_to_hunks(&matches)?;
-    } else if matches.is_present("preview") {
-        preview::diff_hunks()?;
+    /*} else if matches.is_present("preview") {
+        preview::diff_hunks()?;*/
     } else if matches.is_present("write") {
         write::write_changes(&matches)?;
     } else {
-        eprintln!("Either --expand or --preview flag must be provided.");
+        eprintln!("Either --expand or --write flag must be provided.");
     }
 
     Ok(())
