@@ -42,6 +42,27 @@ echo "src/main.rs:10:new content" | grug --write
 cargo install --git https://github.com/jtrv/grug
 ```
 
+## Kakoune
+
+In order to use this with kakoune you can add the following code to your kakrc
+
+```
+define-command grep-write -docstring "
+  grep-write: pipe the current grep-buffer to grug -w and print results
+" %{
+  evaluate-commands -draft %{
+    execute-keys '%'
+    evaluate-commands %sh{
+      printf %s "$kak_selection" | grug -w > "$XDG_DATA_HOME"/kak/grug
+    }
+  }
+  evaluate-commands %sh{
+    output=$(cat "$XDG_DATA_HOME"/kak/grug)
+    echo "echo -markup {Information} '$output'; echo -debug '$output';"
+  }
+}
+```
+
 ## License
 
 This project is licensed under the MIT License.
