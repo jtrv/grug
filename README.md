@@ -5,8 +5,7 @@ Grug is a command-line tool that provides a workflow for expanding, editing, dif
 ## TODO
 
 - [ ] adapt `--write` to apply hunk changes (e.g. edited output from `--expand`)
-- [ ] create `--preview` to view a diff of lines/hunks supplied and current file contents
-- [ ] refactor so it doesn't seem like I leaned on chatgpt as much as I did
+- [ ] create `--preview` to view a diff of current file contents and the lines/hunks piped in
 - [ ] add tests
 
 ## Usage
@@ -24,16 +23,16 @@ grug [OPTIONS]
 
 ## Examples
 
-To expand lines from stdin into hunks:
-
-```
-echo "src/main.rs:10" | grug --expand
-```
-
 To replace lines in files based on input from stdin:
 
 ```
 echo "src/main.rs:10:new content" | grug --write
+```
+
+To expand lines from stdin into hunks:
+
+```
+echo "src/main.rs:10" | grug --expand
 ```
 
 ## Installation
@@ -48,17 +47,18 @@ In order to use this with kakoune you can add the following code to your kakrc
 
 ```
 define-command grep-write -docstring "
-  grep-write: pipe the current grep-buffer to grug -w and print results
+  grep-write: pipes the current grep-buffer to grug -w and prints the results
 " %{
+  declare-option -hidden str grug_buf
   evaluate-commands -draft %{
-    execute-keys '%'
     evaluate-commands %sh{
-      printf %s "$kak_selection" | grug -w > "$XDG_DATA_HOME"/kak/grug
+      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
     }
-  }
-  evaluate-commands %sh{
-    output=$(cat "$XDG_DATA_HOME"/kak/grug)
-    echo "echo -markup {Information} '$output'; echo -debug '$output';"
+    write -sync -force %opt{grug_buf}
+    evaluate-commands %sh{
+      cat "$kak_opt_grug_buf" | grug -w |
+        xargs -I{} echo "echo -debug 'grug: {}'; echo -markup {Information} 'grug: {}';"
+    }
   }
 }
 ```
