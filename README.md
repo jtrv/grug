@@ -1,6 +1,7 @@
 # Grug
 
-Grug is a command-line tool that provides a workflow for expanding, editing, diffing, and writing edits to files using vim-styled grep lines (such as `grep -RHn`, `ripgrep --vimgrep`, `ugrep -HknI`, etc).
+Grug is a command-line tool for expanding, editing, diffing, and writing edits to files using vim-styled grep lines (such as `grep -RHn`, `ripgrep --vimgrep`, `ugrep -HknI`, etc).
+Grug is heavily inspired by the functionality and workflows of [kakoune-multi-file](https://github.com/natasky/kakoune-multi-file), and [kakoune-find](https://github.com/occivink/kakoune-find).
 
 ## TODO
 
