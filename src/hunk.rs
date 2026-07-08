@@ -28,7 +28,7 @@ impl Hunk {
         }
     }
 
-    /// Render header + body as it appears on the wire.
+    /// Render header + body + close marker as it appears on the wire.
     pub fn render(&self) -> String {
         let mut out = format!(
             "@@@ {} {},{} {:x} @@@",
@@ -38,6 +38,8 @@ impl Hunk {
             out.push('\n');
             out.push_str(line);
         }
+        out.push('\n');
+        out.push_str(CLOSE);
         out
     }
 
@@ -52,15 +54,23 @@ impl Hunk {
         hash_lines(region) == self.hash
     }
 
-    /// Parse a stream of lines into hunks. A `@@@` header starts a new hunk;
-    /// the lines that follow (until the next header) are its body. Anything
-    /// before the first header is ignored. Malformed headers become warnings.
+    /// Parse a stream of lines into hunks. A header opens a hunk; the lines
+    /// that follow are its body until a bare `@@@` close, the next header, or
+    /// EOF. Lines between a close and the next header (e.g. trailing newlines
+    /// an editor adds) are ignored. A missing close is tolerated. Anything
+    /// before the first header is ignored; malformed headers become warnings.
     pub fn parse_all<I: IntoIterator<Item = String>>(lines: I) -> (Vec<Hunk>, Vec<String>) {
         let mut hunks: Vec<Hunk> = Vec::new();
         let mut warnings: Vec<String> = Vec::new();
         let mut current: Option<Hunk> = None;
 
         for line in lines {
+            if line.trim() == CLOSE {
+                if let Some(h) = current.take() {
+                    hunks.push(h);
+                }
+                continue;
+            }
             match parse_header(&line) {
                 Some(Ok(h)) => {
                     if let Some(prev) = current.take() {
@@ -87,6 +97,9 @@ impl Hunk {
         (hunks, warnings)
     }
 }
+
+/// Bare marker that closes a hunk body.
+const CLOSE: &str = "@@@";
 
 fn hash_lines(lines: &[String]) -> u32 {
     xxh32(lines.join("\n").as_bytes(), 0)
@@ -200,10 +213,30 @@ mod tests {
     fn edited_body_kept_hash_from_header() {
         let h = Hunk::from_region("f".into(), 1, lines(&["orig"]));
         let mut rendered: Vec<String> = h.render().lines().map(String::from).collect();
-        // user edits the body line
-        *rendered.last_mut().unwrap() = "edited".to_string();
+        // user edits the body line (index 1: after the header, before the close)
+        rendered[1] = "edited".to_string();
         let (parsed, _) = Hunk::parse_all(rendered);
         assert_eq!(parsed[0].body, lines(&["edited"]));
         assert_eq!(parsed[0].hash, h.hash); // hash is still the original's
+    }
+
+    #[test]
+    fn trailing_lines_after_close_are_ignored() {
+        let h = Hunk::from_region("f".into(), 1, lines(&["a", "b", "c"]));
+        // an editor appends a blank line after the close marker
+        let mut wire: Vec<String> = h.render().lines().map(String::from).collect();
+        wire.push(String::new());
+        let (parsed, _) = Hunk::parse_all(wire);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].body, lines(&["a", "b", "c"])); // no phantom blank line
+    }
+
+    #[test]
+    fn close_bounds_the_body_between_hunks() {
+        let wire = lines(&["@@@ f 1,1 0 @@@", "one", "@@@", "", "@@@ f 5,1 0 @@@", "two", "@@@"]);
+        let (parsed, _) = Hunk::parse_all(wire);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].body, lines(&["one"]));
+        assert_eq!(parsed[1].body, lines(&["two"]));
     }
 }
