@@ -42,6 +42,7 @@ pub fn expand_to_hunks(matches: &ArgMatches) -> Result<(), AppError> {
         }
     }
 
+    let mut printed = false;
     for (file_path, lines) in file_lines {
         let path = Path::new(&file_path);
         let file = File::open(path)?;
@@ -49,7 +50,12 @@ pub fn expand_to_hunks(matches: &ArgMatches) -> Result<(), AppError> {
 
         for hunk in build_hunks(&file_path, &contents, &lines, lines_above, lines_below) {
             println!("{}", hunk.render());
+            printed = true;
         }
+    }
+    // A single terminator bounds the last hunk against an editor's trailing newline.
+    if printed {
+        println!("{}", crate::hunk::CLOSE);
     }
     Ok(())
 }

@@ -60,3 +60,21 @@ fn raw_line_write_still_works() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn expand_emits_one_trailing_close() {
+    let dir = std::env::temp_dir().join(format!("grug-close-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("sample.txt");
+    std::fs::write(&file, "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\n").unwrap();
+    let path = file.to_str().unwrap();
+
+    // two distant matches -> two separate hunks
+    let expanded = grug(&["--expand"], &format!("{path}:2\n{path}:9\n"));
+    let headers = expanded.lines().filter(|l| l.starts_with("@@@ ")).count();
+    let closes = expanded.lines().filter(|l| *l == "@@@").count();
+    assert_eq!(headers, 2, "two hunks:\n{expanded}");
+    assert_eq!(closes, 1, "exactly one trailing close for the stream:\n{expanded}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}

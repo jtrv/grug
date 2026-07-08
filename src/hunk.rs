@@ -1,9 +1,10 @@
 use xxhash_rust::xxh32::xxh32;
 
-/// A block of file lines framed by `@@@ path start,len hash @@@` and a bare
-/// `@@@`. `start` is 1-based; `len` and `hash` describe the original region.
-/// The hash is a staleness guard, not a checksum of `body` (which may be
-/// edited between expand and write).
+/// A block of file lines opened by `@@@ path start,len hash @@@`. `start` is
+/// 1-based; `len` and `hash` describe the original region. The hash is a
+/// staleness guard, not a checksum of `body` (which may be edited between
+/// expand and write). A stream of hunks ends with a bare `@@@` (see `CLOSE`)
+/// so the last hunk's body isn't extended by an editor's trailing newline.
 pub struct Hunk {
     pub path: String,
     pub start: usize,
@@ -25,7 +26,8 @@ impl Hunk {
         }
     }
 
-    /// Render header + body + close marker as it appears on the wire.
+    /// Render header + body. A hunk stream is terminated once, at the end, with
+    /// a bare `CLOSE` line; interior hunks are bounded by the next header.
     pub fn render(&self) -> String {
         let mut out = format!(
             "@@@ {} {},{} {:x} @@@",
@@ -35,8 +37,6 @@ impl Hunk {
             out.push('\n');
             out.push_str(line);
         }
-        out.push('\n');
-        out.push_str(CLOSE);
         out
     }
 
@@ -93,8 +93,8 @@ impl Hunk {
     }
 }
 
-/// Bare marker that closes a hunk body.
-const CLOSE: &str = "@@@";
+/// Bare marker that terminates a hunk stream (and closes the final hunk).
+pub const CLOSE: &str = "@@@";
 
 fn hash_lines(lines: &[String]) -> u32 {
     xxh32(lines.join("\n").as_bytes(), 0)
@@ -208,7 +208,7 @@ mod tests {
     fn edited_body_kept_hash_from_header() {
         let h = Hunk::from_region("f".into(), 1, lines(&["orig"]));
         let mut rendered: Vec<String> = h.render().lines().map(String::from).collect();
-        // user edits the body line (index 1: after the header, before the close)
+        // user edits the body line (index 1: after the header)
         rendered[1] = "edited".to_string();
         let (parsed, _) = Hunk::parse_all(rendered);
         assert_eq!(parsed[0].body, lines(&["edited"]));
@@ -218,8 +218,9 @@ mod tests {
     #[test]
     fn trailing_lines_after_close_are_ignored() {
         let h = Hunk::from_region("f".into(), 1, lines(&["a", "b", "c"]));
-        // an editor appends a blank line after the close marker
+        // stream terminator, then a blank line an editor appends
         let mut wire: Vec<String> = h.render().lines().map(String::from).collect();
+        wire.push(CLOSE.to_string());
         wire.push(String::new());
         let (parsed, _) = Hunk::parse_all(wire);
         assert_eq!(parsed.len(), 1);
