@@ -1,101 +1,64 @@
-use fasthash::{xx::Hash32 as XxHash32, FastHash};
-use regex::Regex;
+use similar::{ChangeTag, TextDiff};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
 use crate::errors::AppError;
+use crate::hunk::Hunk;
 
+/// Read hunks from stdin and print, for each one whose body differs from the
+/// current file, a diff of `current file region` vs `edited body`.
 pub fn diff_hunks() -> Result<(), AppError> {
     let stdin = io::stdin();
-    let reader = BufReader::new(stdin.lock());
+    let input: Vec<String> = BufReader::new(stdin.lock())
+        .lines()
+        .collect::<Result<_, _>>()?;
 
-    let re = Regex::new(r"@@@ (.*?) (\d+),(\d+) ([0-9a-f]+) @@@").unwrap();
+    let (hunks, warnings) = Hunk::parse_all(input);
+    warnings.iter().for_each(|w| eprintln!("{}", w));
 
-    let mut _current_file_path = String::new();
-    let mut current_file_lines: Option<Vec<String>> = None;
-    let mut current_hunk_lines: Vec<String> = Vec::new();
-    let mut inside_hunk = false;
-
-    for line in reader.lines() {
-        let line = line?;
-
-        if inside_hunk {
-            if line.starts_with("@@@") {
-                verify_and_print_hunk(
-                    &mut current_file_lines,
-                    &current_hunk_lines,
-                )?;
-                current_hunk_lines.clear();
-                inside_hunk = false;
-            } else {
-                current_hunk_lines.push(line.clone());
-            }
+    for hunk in hunks {
+        let file_lines = read_file_lines(&hunk.path)?;
+        if hunk.start == 0 || hunk.start - 1 + hunk.len > file_lines.len() {
+            eprintln!("Hunk at {}:{} does not fit the file", hunk.path, hunk.start);
+            continue;
         }
 
-        if !inside_hunk {
-            if let Some(caps) = re.captures(&line) {
-                _current_file_path = caps[1].to_string();
-                current_file_lines = Some(read_file_lines(&_current_file_path)?);
-                inside_hunk = true;
-            }
+        let region = file_lines[hunk.start - 1..hunk.start - 1 + hunk.len].join("\n");
+        let edited = hunk.body.join("\n");
+        if region != edited {
+            println!("{}", render_header(&hunk));
+            print_diff(&region, &edited);
         }
     }
-
-    if !current_hunk_lines.is_empty() {
-        verify_and_print_hunk(
-            &mut current_file_lines,
-            &current_hunk_lines,
-        )?;
-    }
-
     Ok(())
+}
+
+fn render_header(hunk: &Hunk) -> String {
+    format!(
+        "@@@ {} {},{} {:x} @@@",
+        hunk.path, hunk.start, hunk.len, hunk.hash
+    )
 }
 
 fn read_file_lines(file_path: &str) -> Result<Vec<String>, AppError> {
-    let path = Path::new(file_path);
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-
-    let lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+    let file = File::open(Path::new(file_path))?;
+    let lines = BufReader::new(file).lines().collect::<Result<_, _>>()?;
     Ok(lines)
 }
 
-fn verify_and_print_hunk(
-    file_lines: &mut Option<Vec<String>>,
-    hunk_lines: &[String],
-) -> Result<(), AppError> {
-    if let Some(lines) = file_lines {
-        let hunk_text = hunk_lines.join("\n");
-        let hunk_hash = XxHash32::hash(hunk_text.as_bytes());
-
-        let file_text = lines.join("\n");
-        let file_hash = XxHash32::hash(file_text.as_bytes());
-
-        if hunk_hash != file_hash {
-            let diff = difference::Changeset::new(&file_text, &hunk_text, "\n");
-            println!("{}", hunk_lines[0]); // Print the hunk header
-            print_diff(&diff);
-        }
-    }
-
-    Ok(())
-}
-
-fn print_diff(changeset: &difference::Changeset) {
-    for diff in &changeset.diffs {
-        match diff {
-            difference::Difference::Same(_) => {
-                // Do nothing, as we only want to print the changed lines
-            }
-            difference::Difference::Add(ref x) => {
-                print!("+"); // Use '+' to represent added lines
-                println!("{}", x);
-            }
-            difference::Difference::Rem(ref x) => {
-                print!("-"); // Use '-' to represent removed lines
-                println!("{}", x);
-            }
+fn print_diff(region: &str, edited: &str) {
+    for change in TextDiff::from_lines(region, edited).iter_all_changes() {
+        let sign = match change.tag() {
+            ChangeTag::Equal => continue,
+            ChangeTag::Delete => '-',
+            ChangeTag::Insert => '+',
+        };
+        let value = change.value();
+        if value.ends_with('\n') {
+            print!("{}{}", sign, value);
+        } else {
+            println!("{}{}", sign, value);
         }
     }
 }

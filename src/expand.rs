@@ -1,142 +1,132 @@
 use clap::ArgMatches;
-use fasthash::{xx::Hash32 as XxHash32, FastHash};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
 use crate::errors::AppError;
+use crate::grepline::GrepLine;
+use crate::hunk::Hunk;
 
 pub fn expand_to_hunks(matches: &ArgMatches) -> Result<(), AppError> {
-    let context_lines: usize = matches
-        .value_of("context")
+    let arg = |name| matches.get_one::<String>(name).map(String::as_str);
+
+    let context_lines: usize = arg("context")
         .unwrap_or("1")
         .parse()
-        .map_err(|_| AppError::InvalidNumber("Invalid number of lines above".to_string()))?;
+        .map_err(|_| AppError::InvalidNumber("Invalid number of context lines".to_string()))?;
 
-    let lines_above: usize = matches
-        .value_of("above")
-        .unwrap_or(&context_lines.to_string())
-        .parse()
-        .map_err(|_| AppError::InvalidNumber("Invalid number of lines above".to_string()))?;
+    let lines_above: usize = arg("above")
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| AppError::InvalidNumber("Invalid number of lines above".to_string()))?
+        .unwrap_or(context_lines);
 
-    let lines_below: usize = matches
-        .value_of("below")
-        .unwrap_or(&context_lines.to_string())
-        .parse()
-        .map_err(|_| AppError::InvalidNumber("Invalid number of lines below".to_string()))?;
+    let lines_below: usize = arg("below")
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| AppError::InvalidNumber("Invalid number of lines below".to_string()))?
+        .unwrap_or(context_lines);
 
     let stdin = io::stdin();
     let reader = BufReader::new(stdin.lock());
 
-    // Init HashMap to store files and their corresponding lines
+    // Group requested line numbers by file (warn-and-skip on malformed input).
     let mut file_lines: HashMap<String, Vec<usize>> = HashMap::new();
-
-    // Process each line from stdin into file_lines
     for line in reader.lines() {
         let line = line?;
-
-        if line.trim().is_empty() {
-            continue;
+        match GrepLine::parse(&line) {
+            Ok(Some(g)) => file_lines.entry(g.path).or_default().push(g.line),
+            Ok(None) => {}
+            Err(e) => eprintln!("{}", e),
         }
-
-        let parts: Vec<&str> = line.splitn(4, ':').collect();
-
-        // Validate format
-        if parts.len() != 4 {
-            return Err(AppError::InvalidLineFormat(line));
-        }
-
-        // Extract file path and line number from parts
-        let file_path = parts[0].to_string();
-        let line_number: usize = parts[1]
-            .parse()
-            .map_err(|_| AppError::InvalidLineNumber(parts[1].to_string()))?;
-
-        file_lines.entry(file_path).or_default().push(line_number);
     }
 
-    // Process each files' lines
     for (file_path, lines) in file_lines {
         let path = Path::new(&file_path);
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let contents: Vec<String> = BufReader::new(file).lines().collect::<Result<_, _>>()?;
 
-        let file_lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
-        let hunks = create_hunks(lines_above, lines_below, &lines, &file_lines, file_path)?;
-
-        for hunk in hunks {
-            println!("{}", hunk);
+        for hunk in build_hunks(&file_path, &contents, &lines, lines_above, lines_below) {
+            println!("{}", hunk.render());
         }
     }
     Ok(())
 }
 
-fn create_hunks(
-    lines_above: usize,
-    lines_below: usize,
+/// Expand requested line numbers into merged hunks. Each line contributes the
+/// region `[line - above, line + below]` (clamped to the file); overlapping or
+/// adjacent regions merge into one hunk. Lines past EOF are skipped.
+fn build_hunks(
+    file_path: &str,
+    contents: &[String],
     lines: &[usize],
-    file_lines: &[String],
-    file_path: String,
-) -> Result<Vec<String>, AppError> {
-    let mut hunks: Vec<String> = Vec::new();
-    let mut current_hunk: Vec<String> = Vec::new();
-    let mut current_hunk_start = 0;
+    above: usize,
+    below: usize,
+) -> Vec<Hunk> {
+    let mut ranges: Vec<(usize, usize)> = lines
+        .iter()
+        .filter(|&&n| n >= 1 && n <= contents.len())
+        .map(|&n| {
+            let start = if n > above { n - above } else { 1 };
+            let end = std::cmp::min(n + below, contents.len());
+            (start, end)
+        })
+        .collect();
+    ranges.sort_unstable();
 
-    for &line_number in lines {
-        let start_line = if line_number > lines_above {
-            line_number - lines_above
-        } else {
-            1
-        };
-        let end_line = std::cmp::min(line_number + lines_below, file_lines.len());
-
-        // Set the hunk start line and add lines to the hunk
-        if current_hunk.is_empty() {
-            current_hunk_start = start_line;
-            current_hunk.extend(file_lines[start_line - 1..=end_line - 1].iter().cloned());
-        } else if start_line - current_hunk_start > current_hunk.len() {
-            // Create hunk text and compute its hash
-            let hunk_text = current_hunk.join("\n");
-            let hash = XxHash32::hash(hunk_text.as_bytes());
-            // Create a hunk header and add it to the hunks vector
-            let hunk_header = format!(
-                "@@@ {} {},{} {:x} @@@",
-                file_path,
-                current_hunk_start,
-                current_hunk.len(),
-                hash
-            );
-            hunks.push(hunk_header);
-            hunks.push(hunk_text);
-
-            // Reset the current_hunk and start a new one
-            current_hunk_start = start_line;
-            current_hunk = file_lines[start_line - 1..=end_line - 1].to_vec();
-        } else {
-            // Extend the current hunk with additional lines
-            current_hunk.extend(
-                file_lines[current_hunk.len() + current_hunk_start - 1..=end_line - 1]
-                    .iter()
-                    .cloned(),
-            );
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for (s, e) in ranges {
+        match merged.last_mut() {
+            Some(last) if s <= last.1 + 1 => last.1 = last.1.max(e),
+            _ => merged.push((s, e)),
         }
     }
 
-    // Check if there's an unprocessed hunk
-    if !current_hunk.is_empty() {
-        let hunk_text = current_hunk.join("\n");
-        let hash = XxHash32::hash(hunk_text.as_bytes());
-        let hunk_header = format!(
-            "@@@ {} {},{} {:x} @@@",
-            file_path,
-            current_hunk_start,
-            current_hunk.len(),
-            hash
-        );
-        hunks.push(hunk_header);
-        hunks.push(hunk_text);
+    merged
+        .into_iter()
+        .map(|(s, e)| Hunk::from_region(file_path.to_string(), s, contents[s - 1..e].to_vec()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(n: usize) -> Vec<String> {
+        (1..=n).map(|i| format!("line{}", i)).collect()
     }
 
-    Ok(hunks)
+    #[test]
+    fn single_line_gets_context() {
+        let h = build_hunks("f", &file(10), &[5], 1, 1);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].start, 4);
+        assert_eq!(h[0].body, vec!["line4", "line5", "line6"]);
+    }
+
+    #[test]
+    fn adjacent_lines_merge() {
+        let h = build_hunks("f", &file(10), &[3, 4], 1, 1);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].body, vec!["line2", "line3", "line4", "line5"]);
+    }
+
+    #[test]
+    fn distant_lines_stay_separate() {
+        let h = build_hunks("f", &file(20), &[3, 15], 1, 1);
+        assert_eq!(h.len(), 2);
+    }
+
+    #[test]
+    fn clamps_at_file_edges() {
+        let h = build_hunks("f", &file(3), &[1], 5, 5);
+        assert_eq!(h[0].start, 1);
+        assert_eq!(h[0].body, vec!["line1", "line2", "line3"]);
+    }
+
+    #[test]
+    fn line_past_eof_skipped() {
+        assert!(build_hunks("f", &file(3), &[99], 1, 1).is_empty());
+    }
 }
