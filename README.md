@@ -33,7 +33,8 @@ The round-trip: expand, edit the hunk bodies in your editor, then write them
 back. `--write` auto-detects hunk input (lines carrying `@@@` headers):
 
 ```
-rg --vimgrep TODO | grug --expand > /tmp/hunks   # edit /tmp/hunks, then:
+rg --vimgrep TODO | grug --expand > /tmp/hunks
+# edit /tmp/hunks, then:
 grug --write < /tmp/hunks
 ```
 
@@ -75,14 +76,8 @@ round-trip.
 Add to your kakrc:
 
 ```kak
-bundle grug https://github.com/jtrv/grug %{
-  # optional: your own mappings, e.g.
-  # map global user e ':grep-expand<ret>'  -docstring 'grug: expand grep buffer'
-  # map global user w ':grep-write<ret>'   -docstring 'grug: write changes'
-}
-bundle-install-hook grug %{
-  cargo install --locked --force --path .
-}
+bundle grug https://github.com/jtrv/grug
+bundle-install-hook grug %{ cargo install --locked --force --path . }
 ```
 
 Then run `:bundle-install`. The install hook compiles and installs the `grug`
