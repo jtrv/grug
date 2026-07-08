@@ -212,7 +212,7 @@ mod tests {
     fn two_hunks_apply_bottom_up() {
         let orig = lines(&["a", "b", "c", "d", "e"]);
         let mut top = Hunk::from_region("f".into(), 1, lines(&["a"]));
-        top.body = lines(&["a1", "a2"]); // grows — must not shift the lower hunk
+        top.body = lines(&["a1", "a2"]); // grows, must not shift the lower hunk
         let mut bot = Hunk::from_region("f".into(), 4, lines(&["d"]));
         bot.body = lines(&["D"]);
         let (out, applied, _) = apply_hunks(&orig, vec![top, bot], "f");

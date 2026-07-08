@@ -1,9 +1,9 @@
 use crate::errors::AppError;
 
-/// A vimgrep-style line: `path:line[:col]:content`. Field count varies by tool
-/// — `file:line` (2), `grep -Hn` (3), `rg --vimgrep` (4) — so the column is
-/// detected and dropped, leaving what `expand` (path, line) and raw-mode
-/// `write` (content) need.
+/// A vimgrep-style line: `path:line[:col]:content`. The field count varies by
+/// tool (`file:line`, `grep -Hn`, `rg --vimgrep`), so the column is detected
+/// and dropped, leaving what `expand` (path, line) and raw-mode `write`
+/// (content) need.
 pub struct GrepLine {
     pub path: String,
     pub line: usize,

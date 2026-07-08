@@ -1,4 +1,4 @@
-# grug.kak — drive the grug round-trip from kakoune.
+# grug.kak: drive the grug round-trip from kakoune.
 #
 # Flow: :grep foo  ->  :grep-expand  ->  edit the hunks  ->
 #       :grep-preview (optional)  ->  :grep-write
@@ -11,7 +11,7 @@ declare-option -hidden str grug_buf
 
 define-command grep-expand -params 0.. -docstring "
   grep-expand [flags]: expand the current grep buffer into editable hunks.
-  Forwards grug's context flags to control how far each hunk expands —
+  Forwards grug's context flags to control how far each hunk expands:
   -C N (around), -A N (above), -B N (below). Defaults to one line.
 " %{
   execute-keys '%' "|grug -e %arg{@}<ret>"

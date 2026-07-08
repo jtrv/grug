@@ -29,7 +29,7 @@ Expand grep lines into editable hunks:
 echo "src/main.rs:10" | grug --expand
 ```
 
-The round-trip — expand, edit the hunk bodies in your editor, then write them
+The round-trip: expand, edit the hunk bodies in your editor, then write them
 back. `--write` auto-detects hunk input (lines carrying `@@@` headers):
 
 ```
@@ -99,9 +99,9 @@ source "/path/to/grug/rc/grug.kak"
 
 ### Commands
 
-- `grep-expand [flags]` — expand the current grep buffer into editable hunks (`grug -e`)
-- `grep-preview` — preview a diff without writing (`grug -p`)
-- `grep-write` — apply the buffer to files, raw grep lines or edited hunks (`grug -w`)
+- `grep-expand [flags]` expands the grep buffer into editable hunks (`grug -e`).
+- `grep-preview` shows a diff without writing (`grug -p`).
+- `grep-write` applies the buffer to files, raw grep lines or edited hunks alike (`grug -w`).
 
 Typical flow: `:grep foo` → `:grep-expand` → edit → `:grep-preview` (optional) →
 `:grep-write`. `grep-expand` forwards grug's context flags, so `:grep-expand -C 3`
