@@ -15,6 +15,7 @@ define-command grep-expand -params 0.. -docstring "
   -C N (around), -A N (above), -B N (below). Defaults to one line.
 " %{
   execute-keys '%' "|grug -e %arg{@}<ret>"
+  set-option buffer filetype grep-expand
 }
 
 define-command grep-preview -docstring "
