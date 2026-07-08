@@ -74,3 +74,19 @@ define-command grep-write -docstring "
     fi
   }
 }
+
+# Highlight the @@@ hunk headers and the stream terminator. Hunk bodies are
+# arbitrary file content, so they keep the buffer's default (plain) face.
+provide-module grug-highlight %{
+  add-highlighter shared/grep-expand group
+  add-highlighter shared/grep-expand/header regex ^(@@@)\h(.+?)\h(\d+,\d+)\h([0-9a-f]+)\h(@@@)$ 1:meta 2:module 3:value 4:comment 5:meta
+  add-highlighter shared/grep-expand/close regex ^@@@$ 0:meta
+}
+
+hook global WinSetOption filetype=grep-expand %{
+  require-module grug-highlight
+  add-highlighter window/grep-expand ref grep-expand
+  hook -once -always window WinSetOption filetype=.* %{
+    remove-highlighter window/grep-expand
+  }
+}
