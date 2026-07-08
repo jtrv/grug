@@ -67,61 +67,45 @@ Swap `fish` for `bash`, `zsh`, `elvish`, or `powershell` as needed.
 
 ## Kakoune
 
-Add the following to your kakrc. It wires up the full round-trip: from a grep
-buffer (`:grep`, ripgrep, etc.), run `grep-expand` to turn the matches into
-editable hunks, edit them, optionally `grep-preview` the diff, then
-`grep-write` to apply.
+grug ships a kakoune plugin ([`rc/grug.kak`](rc/grug.kak)) that wires up the
+round-trip.
 
-```
-# Shared temp file used to hand the current buffer to grug.
-declare-option -hidden str grug_buf
+### Install with [kak-bundle](https://codeberg.org/jdugan6240/kak-bundle)
 
-define-command grep-expand -docstring "
-  grep-expand: expand the current grep buffer into editable hunks
-" %{
-  execute-keys '%|grug -e<ret>'
+Add to your kakrc:
+
+```kak
+bundle grug https://github.com/jtrv/grug %{
+  # optional: your own mappings, e.g.
+  # map global user e ':grep-expand<ret>'  -docstring 'grug: expand grep buffer'
+  # map global user w ':grep-write<ret>'   -docstring 'grug: write changes'
 }
-
-define-command grep-preview -docstring "
-  grep-preview: preview a diff of files against the edited hunks in this
-  buffer, without writing anything
-" %{
-  evaluate-commands -draft %{
-    evaluate-commands %sh{
-      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
-    }
-    write -sync -force %opt{grug_buf}
-    evaluate-commands %sh{
-      diff=$(grug -p < "$kak_opt_grug_buf")
-      [ -z "$diff" ] && diff="(no changes)"
-      # escape single quotes for kakoune's string syntax
-      diff=$(printf '%s' "$diff" | sed "s/'/''/g")
-      printf "info -title 'grug preview' -- '%s'" "$diff"
-    }
-  }
-}
-
-define-command grep-write -docstring "
-  grep-write: apply the current buffer to files (raw grep lines or edited
-  hunks) and report the result
-" %{
-  evaluate-commands -draft %{
-    evaluate-commands %sh{
-      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
-    }
-    write -sync -force %opt{grug_buf}
-    evaluate-commands %sh{
-      cat "$kak_opt_grug_buf" | grug -w |
-        xargs -I{} echo "echo -debug 'grug: {}'; echo -markup {Information} 'grug: {}';"
-    }
-  }
+bundle-install-hook grug %{
+  cargo install --locked --force --path .
 }
 ```
 
-Expansion context follows grug's flags — pass them in the pipe, e.g.
-`%|grug -e -C 3<ret>` for three lines of context. `grep-write` handles both a
-raw grep buffer and an expanded-and-edited hunk buffer, since `grug -w`
-auto-detects the two.
+Then run `:bundle-install`. The install hook compiles and installs the `grug`
+binary, and kak-bundle sources the plugin's commands.
+
+### Manual install
+
+Without a plugin manager, `source` the file from your kakrc (and make sure the
+`grug` binary is on your `PATH`):
+
+```kak
+source "/path/to/grug/rc/grug.kak"
+```
+
+### Commands
+
+- `grep-expand` — expand the current grep buffer into editable hunks (`grug -e`)
+- `grep-preview` — preview a diff without writing (`grug -p`)
+- `grep-write` — apply the buffer to files, raw grep lines or edited hunks (`grug -w`)
+
+Typical flow: `:grep foo` → `:grep-expand` → edit → `:grep-preview` (optional) →
+`:grep-write`. Expansion context follows grug's flags — edit `grep-expand` to
+pass them, e.g. `%|grug -e -C 3<ret>` for three lines of context.
 
 ## License
 
