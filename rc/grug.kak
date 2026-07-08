@@ -79,7 +79,7 @@ define-command grep-write -docstring "
 # arbitrary file content, so they keep the buffer's default (plain) face.
 provide-module grug-highlight %{
   add-highlighter shared/grep-expand group
-  add-highlighter shared/grep-expand/header regex ^(@@@)\h(.+?)\h(\d+,\d+)\h([0-9a-f]+)\h(@@@)$ 1:meta 2:module 3:value 4:comment 5:meta
+  add-highlighter shared/grep-expand/header regex ^(@@@)\h(.+?)\h(\d+,\d+)\h([0-9a-f]+)\h(@@@)$ 1:meta 2:cyan 3:green 4:comment 5:meta
   add-highlighter shared/grep-expand/close regex ^@@@$ 0:meta
 }
 
