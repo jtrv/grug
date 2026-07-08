@@ -67,13 +67,44 @@ Swap `fish` for `bash`, `zsh`, `elvish`, or `powershell` as needed.
 
 ## Kakoune
 
-In order to use this with kakoune you can add the following code to your kakrc
+Add the following to your kakrc. It wires up the full round-trip: from a grep
+buffer (`:grep`, ripgrep, etc.), run `grep-expand` to turn the matches into
+editable hunks, edit them, optionally `grep-preview` the diff, then
+`grep-write` to apply.
 
 ```
-define-command grep-write -docstring "
-  grep-write: pipes the current grep-buffer to grug -w and prints the results
+# Shared temp file used to hand the current buffer to grug.
+declare-option -hidden str grug_buf
+
+define-command grep-expand -docstring "
+  grep-expand: expand the current grep buffer into editable hunks
 " %{
-  declare-option -hidden str grug_buf
+  execute-keys '%|grug -e<ret>'
+}
+
+define-command grep-preview -docstring "
+  grep-preview: preview a diff of files against the edited hunks in this
+  buffer, without writing anything
+" %{
+  evaluate-commands -draft %{
+    evaluate-commands %sh{
+      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
+    }
+    write -sync -force %opt{grug_buf}
+    evaluate-commands %sh{
+      diff=$(grug -p < "$kak_opt_grug_buf")
+      [ -z "$diff" ] && diff="(no changes)"
+      # escape single quotes for kakoune's string syntax
+      diff=$(printf '%s' "$diff" | sed "s/'/''/g")
+      printf "info -title 'grug preview' -- '%s'" "$diff"
+    }
+  }
+}
+
+define-command grep-write -docstring "
+  grep-write: apply the current buffer to files (raw grep lines or edited
+  hunks) and report the result
+" %{
   evaluate-commands -draft %{
     evaluate-commands %sh{
       echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
@@ -86,6 +117,11 @@ define-command grep-write -docstring "
   }
 }
 ```
+
+Expansion context follows grug's flags — pass them in the pipe, e.g.
+`%|grug -e -C 3<ret>` for three lines of context. `grep-write` handles both a
+raw grep buffer and an expanded-and-edited hunk buffer, since `grug -w`
+auto-detects the two.
 
 ## License
 
