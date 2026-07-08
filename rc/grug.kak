@@ -36,11 +36,11 @@ define-command grep-expand -params 0.. -docstring "
 
 define-command grep-preview -docstring "
   grep-preview: show a diff of the *grep-expand* hunks against the files in a
-  *grep-expand-review* buffer, without writing anything.
+  *grep-expand-preview* buffer, without writing anything.
 " %{
   evaluate-commands %sh{ printf "set-option global grug_tmp '%s'\n" "$(mktemp "${TMPDIR:-/tmp}/grug_rev.XXXXXX")" }
   evaluate-commands -buffer *grep-expand* %{ write -sync -force %opt{grug_tmp} }
-  edit! -scratch *grep-expand-review*
+  edit! -scratch *grep-expand-preview*
   set-option buffer filetype diff
   evaluate-commands %sh{
     out=$(mktemp "${TMPDIR:-/tmp}/grug_revout.XXXXXX")
@@ -65,7 +65,7 @@ define-command grep-write -docstring "
     skipped=$(printf '%s' "$out" | sed -n 's/.*, \([0-9][0-9]*\) \(skipped\|ignored\)$/\1/p')
     if [ -z "$errmsg" ] && [ "${skipped:-0}" = 0 ]; then
       printf "echo -markup '{Information}grug: %s'\n" "$out"
-      printf "try %%{ delete-buffer! *grep-expand-review* }\n"
+      printf "try %%{ delete-buffer! *grep-expand-preview* }\n"
       printf "try %%{ delete-buffer! *grep-expand* }\n"
     else
       esc=$(printf '%s\n%s' "$out" "$errmsg" | sed "s/'/''/g")
