@@ -5,12 +5,13 @@ mod hunk;
 mod preview;
 mod write;
 
-use clap::{Arg, ArgAction, Command};
+use clap::{value_parser, Arg, ArgAction, Command};
+use clap_complete::{generate, Shell};
 
 use crate::errors::AppError;
 
-fn main() -> Result<(), AppError> {
-    let matches = Command::new("grug")
+fn build_cli() -> Command {
+    Command::new("grug")
         .arg(
             Arg::new("expand")
                 .short('e')
@@ -53,7 +54,23 @@ fn main() -> Result<(), AppError> {
                 .action(ArgAction::SetTrue)
                 .help("Apply stdin to files: edited hunks (@@@) or raw grep lines"),
         )
-        .get_matches();
+        .arg(
+            Arg::new("completions")
+                .long("completions")
+                .value_name("SHELL")
+                .value_parser(value_parser!(Shell))
+                .help("Print shell completions for SHELL to stdout"),
+        )
+}
+
+fn main() -> Result<(), AppError> {
+    let matches = build_cli().get_matches();
+
+    if let Some(&shell) = matches.get_one::<Shell>("completions") {
+        let mut cmd = build_cli();
+        generate(shell, &mut cmd, "grug", &mut std::io::stdout());
+        return Ok(());
+    }
 
     if matches.get_flag("expand") {
         expand::expand_to_hunks(&matches)?;

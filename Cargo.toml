@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = "4"
+clap_complete = "4"
 rayon = "1.12"
-similar = "2"
+similar = "3"
 xxhash-rust = { version = "0.8", features = ["xxh32"] }

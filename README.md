@@ -55,6 +55,16 @@ grug --preview < /tmp/hunks
 cargo install --git https://github.com/jtrv/grug
 ```
 
+## Shell completions
+
+`grug` generates completions for any shell clap supports. For fish:
+
+```
+grug --completions fish > ~/.config/fish/completions/grug.fish
+```
+
+Swap `fish` for `bash`, `zsh`, `elvish`, or `powershell` as needed.
+
 ## Kakoune
 
 In order to use this with kakoune you can add the following code to your kakrc
