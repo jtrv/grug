@@ -99,13 +99,14 @@ source "/path/to/grug/rc/grug.kak"
 
 ### Commands
 
-- `grep-expand [flags]` expands the grep buffer into editable hunks (`grug -e`).
-- `grep-preview` shows a diff without writing (`grug -p`).
-- `grep-write` applies the buffer to files, raw grep lines or edited hunks alike (`grug -w`).
+- `grep-expand [flags]` expands the grep buffer into a `*grep-expand*` buffer of editable hunks, leaving `*grep*` intact (`grug -e`).
+- `grep-preview` shows the pending changes as a diff in a `*grep-expand-review*` buffer (`grug -p`).
+- `grep-write` applies the hunks, closing the grug buffers on a clean apply and keeping them (with a report) if anything is skipped (`grug -w`).
 
 Typical flow: `:grep foo` → `:grep-expand` → edit → `:grep-preview` (optional) →
 `:grep-write`. `grep-expand` forwards grug's context flags, so `:grep-expand -C 3`
-gives three lines around each match (`-A` above, `-B` below).
+gives three lines around each match (`-A` above, `-B` below); re-run it from the
+`*grep-expand*` buffer to re-expand the same matches with a different context.
 
 ## License
 

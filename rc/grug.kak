@@ -3,52 +3,74 @@
 # Flow: :grep foo  ->  :grep-expand  ->  edit the hunks  ->
 #       :grep-preview (optional)  ->  :grep-write
 #
-# grug -w auto-detects raw grep lines vs edited @@@ hunks, so grep-write
-# works on both a plain grep buffer and an expanded-and-edited one.
+# grep-expand reads the current grep buffer and writes hunks to a dedicated
+# *grep-expand* buffer, leaving *grep* intact. grep-preview and grep-write act
+# on *grep-expand* whatever buffer you call them from. grug -w auto-detects raw
+# grep lines vs edited @@@ hunks.
 
-# Shared temp file used to hand the current buffer to grug.
-declare-option -hidden str grug_buf
+declare-option -hidden str grug_src   # temp holding the grep lines to expand
+declare-option -hidden str grug_tmp   # temp for preview/write payloads
 
 define-command grep-expand -params 0.. -docstring "
-  grep-expand [flags]: expand the current grep buffer into editable hunks.
-  Forwards grug's context flags to control how far each hunk expands:
-  -C N (around), -A N (above), -B N (below). Defaults to one line.
+  grep-expand [flags]: expand the grep buffer into a *grep-expand* buffer.
+  Forwards grug's context flags: -C N (around), -A N (above), -B N (below).
+  Re-run it from *grep-expand* to re-expand the same matches with new context.
 " %{
-  execute-keys '%' "|grug -e %arg{@}<ret>"
+  # Stash the source grep lines, unless we're re-expanding from *grep-expand*.
+  evaluate-commands %sh{
+    if [ "$kak_bufname" != '*grep-expand*' ]; then
+      src=$(mktemp "${TMPDIR:-/tmp}/grug_src.XXXXXX")
+      printf "write -sync -force '%s'\n" "$src"
+      printf "set-option global grug_src '%s'\n" "$src"
+    fi
+  }
+  edit! -scratch *grep-expand*
   set-option buffer filetype grep-expand
+  evaluate-commands %sh{
+    out=$(mktemp "${TMPDIR:-/tmp}/grug_out.XXXXXX")
+    grug -e "$@" < "$kak_opt_grug_src" > "$out"
+    printf "execute-keys '%%' '|cat %s<ret>gg'\n" "$out"
+    printf "nop %%sh{ rm -f '%s' }\n" "$out"
+  }
 }
 
 define-command grep-preview -docstring "
-  grep-preview: preview a diff of files against the edited hunks in this
-  buffer, without writing anything
+  grep-preview: show a diff of the *grep-expand* hunks against the files in a
+  *grep-expand-review* buffer, without writing anything.
 " %{
-  evaluate-commands -draft %{
-    evaluate-commands %sh{
-      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
-    }
-    write -sync -force %opt{grug_buf}
-    evaluate-commands %sh{
-      diff=$(grug -p < "$kak_opt_grug_buf")
-      [ -z "$diff" ] && diff="(no changes)"
-      # escape single quotes for kakoune's string syntax
-      diff=$(printf '%s' "$diff" | sed "s/'/''/g")
-      printf "info -title 'grug preview' -- '%s'" "$diff"
-    }
+  evaluate-commands %sh{ printf "set-option global grug_tmp '%s'\n" "$(mktemp "${TMPDIR:-/tmp}/grug_rev.XXXXXX")" }
+  evaluate-commands -buffer *grep-expand* %{ write -sync -force %opt{grug_tmp} }
+  edit! -scratch *grep-expand-review*
+  set-option buffer filetype diff
+  evaluate-commands %sh{
+    out=$(mktemp "${TMPDIR:-/tmp}/grug_revout.XXXXXX")
+    grug -p < "$kak_opt_grug_tmp" > "$out"
+    [ -s "$out" ] || printf '(no changes)\n' > "$out"
+    printf "execute-keys '%%' '|cat %s<ret>gg'\n" "$out"
+    printf "nop %%sh{ rm -f '%s' '%s' }\n" "$out" "$kak_opt_grug_tmp"
   }
 }
 
 define-command grep-write -docstring "
-  grep-write: apply the current buffer to files (raw grep lines or edited
-  hunks) and report the result
+  grep-write: apply the *grep-expand* hunks (or raw grep lines) to files. On a
+  clean apply the grug buffers close; if anything is skipped they stay open and
+  the report is shown.
 " %{
-  evaluate-commands -draft %{
-    evaluate-commands %sh{
-      echo "set-option buffer grug_buf '$(mktemp /tmp/grug_buf.XXX)'"
-    }
-    write -sync -force %opt{grug_buf}
-    evaluate-commands %sh{
-      cat "$kak_opt_grug_buf" | grug -w |
-        xargs -I{} echo "echo -debug 'grug: {}'; echo -markup {Information} 'grug: {}';"
-    }
+  evaluate-commands %sh{ printf "set-option global grug_tmp '%s'\n" "$(mktemp "${TMPDIR:-/tmp}/grug_w.XXXXXX")" }
+  evaluate-commands -buffer *grep-expand* %{ write -sync -force %opt{grug_tmp} }
+  evaluate-commands %sh{
+    err=$(mktemp)
+    out=$(grug -w < "$kak_opt_grug_tmp" 2>"$err")
+    errmsg=$(cat "$err"); rm -f "$err" "$kak_opt_grug_tmp"
+    skipped=$(printf '%s' "$out" | sed -n 's/.*, \([0-9][0-9]*\) \(skipped\|ignored\)$/\1/p')
+    if [ -z "$errmsg" ] && [ "${skipped:-0}" = 0 ]; then
+      printf "echo -markup '{Information}grug: %s'\n" "$out"
+      printf "try %%{ delete-buffer! *grep-expand-review* }\n"
+      printf "try %%{ delete-buffer! *grep-expand* }\n"
+    else
+      esc=$(printf '%s\n%s' "$out" "$errmsg" | sed "s/'/''/g")
+      printf "echo -markup '{Error}grug: not fully applied'\n"
+      printf "info -title 'grug' -- '%s'\n" "$esc"
+    fi
   }
 }
