@@ -228,7 +228,15 @@ mod tests {
 
     #[test]
     fn close_bounds_the_body_between_hunks() {
-        let wire = lines(&["@@@ f 1,1 0 @@@", "one", "@@@", "", "@@@ f 5,1 0 @@@", "two", "@@@"]);
+        let wire = lines(&[
+            "@@@ f 1,1 0 @@@",
+            "one",
+            "@@@",
+            "",
+            "@@@ f 5,1 0 @@@",
+            "two",
+            "@@@",
+        ]);
         let (parsed, _) = Hunk::parse_all(wire);
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].body, lines(&["one"]));

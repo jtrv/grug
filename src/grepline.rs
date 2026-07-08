@@ -70,7 +70,10 @@ mod tests {
 
     #[test]
     fn four_field_drops_the_column() {
-        assert_eq!(content("a.rs:3:5:let x = 1;").as_deref(), Some("let x = 1;"));
+        assert_eq!(
+            content("a.rs:3:5:let x = 1;").as_deref(),
+            Some("let x = 1;")
+        );
     }
 
     #[test]

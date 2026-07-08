@@ -2,6 +2,12 @@
 name = "grug"
 version = "0.1.0"
 edition = "2021"
+description = "Expand, edit, diff, and write file edits through vimgrep lines"
+license = "MIT"
+repository = "https://github.com/jtrv/grug"
+readme = "README.md"
+keywords = ["grep", "vimgrep", "kakoune", "cli", "editing"]
+categories = ["command-line-utilities", "text-editors"]
 
 [dependencies]
 clap = "4"
