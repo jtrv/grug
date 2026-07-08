@@ -63,10 +63,9 @@ fn apply_hunks_to_file(file_path: &str, hunks: Vec<Hunk>) -> io::Result<(usize, 
     Ok((applied, skipped))
 }
 
-/// Splice edited hunk bodies into the file. Hunks apply bottom-up (highest
-/// `start` first) against the original coordinates, so earlier splices — at
-/// higher indices — never shift the coordinates of later ones. Stale hunks
-/// (failing `verify`) and hunks overlapping an already-applied region are
+/// Splice edited bodies into the file. Hunks apply bottom-up (highest `start`
+/// first) against the original coordinates, so a splice never shifts a
+/// not-yet-applied hunk. Stale (`verify` fails) or overlapping hunks are
 /// skipped and warned.
 fn apply_hunks(
     orig: &[String],

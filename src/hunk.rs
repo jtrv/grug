@@ -1,11 +1,9 @@
 use xxhash_rust::xxh32::xxh32;
 
-/// A contiguous block of file lines with a header:
-/// `@@@ path start,len hash @@@` followed by the body.
-///
-/// `start` is the 1-based line of the first body line, `len` is the length of
-/// the **original** region, and `hash` is a staleness guard over that original
-/// region — never over the (possibly edited) body carried in `body`.
+/// A block of file lines framed by `@@@ path start,len hash @@@` and a bare
+/// `@@@`. `start` is 1-based; `len` and `hash` describe the original region.
+/// The hash is a staleness guard, not a checksum of `body` (which may be
+/// edited between expand and write).
 pub struct Hunk {
     pub path: String,
     pub start: usize,
@@ -15,8 +13,7 @@ pub struct Hunk {
 }
 
 impl Hunk {
-    /// Build a hunk from a slice of the file (the `expand` side). At expand
-    /// time body == region, so the hash is taken over the body.
+    /// Build a hunk from a file region (expand side); the hash covers `body`.
     pub fn from_region(path: String, start: usize, body: Vec<String>) -> Hunk {
         let hash = hash_lines(&body);
         Hunk {
@@ -43,9 +40,8 @@ impl Hunk {
         out
     }
 
-    /// Recompute the hash over the current file region this hunk targets and
-    /// compare to the header hash. `false` => the file changed since expand
-    /// (stale) or the region no longer fits the file.
+    /// True if the file's current region still hashes to the header hash;
+    /// false if it drifted since expand or no longer fits the file.
     pub fn verify(&self, file_lines: &[String]) -> bool {
         if self.start == 0 || self.start - 1 + self.len > file_lines.len() {
             return false;
@@ -54,11 +50,10 @@ impl Hunk {
         hash_lines(region) == self.hash
     }
 
-    /// Parse a stream of lines into hunks. A header opens a hunk; the lines
-    /// that follow are its body until a bare `@@@` close, the next header, or
-    /// EOF. Lines between a close and the next header (e.g. trailing newlines
-    /// an editor adds) are ignored. A missing close is tolerated. Anything
-    /// before the first header is ignored; malformed headers become warnings.
+    /// Parse a stream into hunks. A header opens a hunk; following lines are
+    /// its body until a bare `@@@`, the next header, or EOF. Content between a
+    /// close and the next header (e.g. an editor's trailing newline) is
+    /// ignored; a missing close is tolerated. Malformed headers become warnings.
     pub fn parse_all<I: IntoIterator<Item = String>>(lines: I) -> (Vec<Hunk>, Vec<String>) {
         let mut hunks: Vec<Hunk> = Vec::new();
         let mut warnings: Vec<String> = Vec::new();
