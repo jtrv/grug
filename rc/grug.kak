@@ -9,10 +9,12 @@
 # Shared temp file used to hand the current buffer to grug.
 declare-option -hidden str grug_buf
 
-define-command grep-expand -docstring "
-  grep-expand: expand the current grep buffer into editable hunks
+define-command grep-expand -params 0.. -docstring "
+  grep-expand [flags]: expand the current grep buffer into editable hunks.
+  Forwards grug's context flags to control how far each hunk expands —
+  -C N (around), -A N (above), -B N (below). Defaults to one line.
 " %{
-  execute-keys '%|grug -e<ret>'
+  execute-keys '%' "|grug -e %arg{@}<ret>"
 }
 
 define-command grep-preview -docstring "
