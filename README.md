@@ -3,6 +3,16 @@
 Grug is a command-line tool for expanding, editing, diffing, and writing edits to files using vim-styled grep lines (such as `grep -RHn`, `ripgrep --vimgrep`, `ugrep -HknI`, etc).
 Grug is heavily inspired by the functionality and workflows of [kakoune-multi-file](https://github.com/natasky/kakoune-multi-file), and [kakoune-find](https://github.com/occivink/kakoune-find).
 
+The round-trip on the command line: `--expand` into hunks, edit them, `--preview` the diff, `--write` it back.
+
+![cli demo](demo/cli.gif)
+
+The same round-trip in kakoune, driven by the shipped plugin: `:grep` → `:grep-expand` → edit the hunks → `:grep-preview` → `:grep-write`.
+
+![kakoune demo](demo/demo.gif)
+
+<sub>Both are recorded with [vhs](https://github.com/charmbracelet/vhs): `vhs demo/cli.tape` and `vhs demo/demo.tape` from the repo root.</sub>
+
 ## Usage
 
 ```
