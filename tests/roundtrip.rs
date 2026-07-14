@@ -38,7 +38,7 @@ fn expand_edit_write_round_trip() {
 
     // write the edited hunk back
     let summary = grug(&["--write"], &edited);
-    assert!(summary.contains("1 hunks applied"), "got: {}", summary);
+    assert!(summary.contains("1 hunks changed"), "got: {}", summary);
 
     let result = std::fs::read_to_string(&file).unwrap();
     assert_eq!(result, "one\ntwo\nTHREE\nINSERTED\nfour\nfive\n");

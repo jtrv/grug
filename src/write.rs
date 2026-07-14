@@ -33,34 +33,32 @@ fn write_hunks(input: Vec<String>) -> io::Result<()> {
         by_file.entry(h.path.clone()).or_default().push(h);
     }
 
-    let counts: Vec<_> = by_file
+    let changed: usize = by_file
         .into_par_iter()
         .filter_map(|(path, hunks)| {
             apply_hunks_to_file(&path, hunks)
                 .map_err(|e| eprintln!("Error applying hunks to {}: {}", path, e))
                 .ok()
         })
-        .collect();
+        .sum();
 
-    let applied: usize = counts.iter().map(|(a, _)| a).sum();
-    let skipped: usize = counts.iter().map(|(_, s)| s).sum();
-    println!("{} hunks applied, {} skipped", applied, skipped);
+    println!("{} hunks changed", changed);
     Ok(())
 }
 
-fn apply_hunks_to_file(file_path: &str, hunks: Vec<Hunk>) -> io::Result<(usize, usize)> {
+fn apply_hunks_to_file(file_path: &str, hunks: Vec<Hunk>) -> io::Result<usize> {
     let path = Path::new(file_path);
     let orig: Vec<String> = BufReader::new(File::open(path)?)
         .lines()
         .collect::<Result<_, _>>()?;
 
-    let (out, applied, skipped) = apply_hunks(&orig, hunks, file_path);
+    let (out, changed, _) = apply_hunks(&orig, hunks, file_path);
 
     let mut file = File::create(path)?;
     for line in out {
         writeln!(file, "{}", line)?;
     }
-    Ok((applied, skipped))
+    Ok(changed)
 }
 
 /// Splice edited bodies into the file. Hunks apply bottom-up (highest `start`
@@ -75,7 +73,7 @@ fn apply_hunks(
     hunks.sort_by_key(|h| std::cmp::Reverse(h.start)); // bottom-up
 
     let mut out = orig.to_vec();
-    let mut applied = 0;
+    let mut changed = 0;
     let mut skipped = 0;
     let mut lowest_touched = usize::MAX; // lowest original index already spliced
 
@@ -94,11 +92,13 @@ fn apply_hunks(
             skipped += 1;
             continue;
         }
+        if h.body != orig[h.start - 1..end] {
+            changed += 1;
+        }
         out.splice((h.start - 1)..end, h.body);
         lowest_touched = h.start - 1;
-        applied += 1;
     }
-    (out, applied, skipped)
+    (out, changed, skipped)
 }
 
 // ---- raw grep-line path -----------------------------------------------------
@@ -121,34 +121,32 @@ fn write_raw(input: Vec<String>) -> io::Result<()> {
         }
     }
 
-    let counts: Vec<_> = file_changes
+    let changed: usize = file_changes
         .into_par_iter()
         .filter_map(|(file_path, changes)| {
             replace_lines(&file_path, changes)
                 .map_err(|e| eprintln!("Error replacing lines in {}: {}", file_path, e))
                 .ok()
         })
-        .collect();
+        .sum();
 
-    let changed: usize = counts.iter().map(|(c, _)| c).sum();
-    let ignored: usize = counts.iter().map(|(_, i)| i).sum();
-    println!("{} lines changed, {} lines ignored", changed, ignored);
+    println!("{} lines changed", changed);
     Ok(())
 }
 
-fn replace_lines(file_path: &str, changes: Vec<Change>) -> io::Result<(usize, usize)> {
+fn replace_lines(file_path: &str, changes: Vec<Change>) -> io::Result<usize> {
     let path = Path::new(file_path);
     let orig: Vec<String> = BufReader::new(File::open(path)?)
         .lines()
         .collect::<Result<_, _>>()?;
 
-    let (lines, changed, ignored) = apply_changes(&orig, changes, file_path);
+    let (lines, changed, _) = apply_changes(&orig, changes, file_path);
 
     let mut file = File::create(path)?;
     for line in lines {
         writeln!(file, "{}", line)?;
     }
-    Ok((changed, ignored))
+    Ok(changed)
 }
 
 fn apply_changes(
@@ -236,11 +234,23 @@ mod tests {
     fn overlapping_hunk_skipped() {
         let orig = lines(&["a", "b", "c", "d"]);
         let outer = Hunk::from_region("f".into(), 1, lines(&["a", "b", "c"]));
-        let inner = Hunk::from_region("f".into(), 2, lines(&["b"]));
+        let mut inner = Hunk::from_region("f".into(), 2, lines(&["b"]));
+        inner.body = lines(&["B"]);
         // bottom-up: inner (start 2) applies first, outer (start 1, end 4) overlaps it
-        let (_, applied, skipped) = apply_hunks(&orig, vec![outer, inner], "f");
-        assert_eq!(applied, 1);
+        let (out, changed, skipped) = apply_hunks(&orig, vec![outer, inner], "f");
+        assert_eq!(changed, 1);
         assert_eq!(skipped, 1);
+        assert_eq!(out, lines(&["a", "B", "c", "d"]));
+    }
+
+    #[test]
+    fn unedited_hunk_not_counted() {
+        let orig = lines(&["a", "b", "c"]);
+        let h = Hunk::from_region("f".into(), 2, lines(&["b"])); // body == original
+        let (out, changed, skipped) = apply_hunks(&orig, vec![h], "f");
+        assert_eq!(changed, 0);
+        assert_eq!(skipped, 0);
+        assert_eq!(out, orig);
     }
 
     #[test]

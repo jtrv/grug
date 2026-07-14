@@ -62,8 +62,7 @@ define-command grep-write -docstring "
     err=$(mktemp)
     out=$(grug -w < "$kak_opt_grug_tmp" 2>"$err")
     errmsg=$(cat "$err"); rm -f "$err" "$kak_opt_grug_tmp"
-    skipped=$(printf '%s' "$out" | sed -n 's/.*, \([0-9][0-9]*\) \(skipped\|ignored\)$/\1/p')
-    if [ -z "$errmsg" ] && [ "${skipped:-0}" = 0 ]; then
+    if [ -z "$errmsg" ]; then
       printf "echo -markup '{Information}grug: %s'\n" "$out"
       printf "try %%{ delete-buffer! *grep-expand-preview* }\n"
       printf "try %%{ delete-buffer! *grep-expand* }\n"
